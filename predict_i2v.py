@@ -18,6 +18,7 @@ from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import save_videos_grid, get_image_to_video_latent
+from motionBrush.motion_brush_utils import EulerDiscreteSchedulerMotionBrush
 
 # Low gpu memory mode, this is used when the GPU memory is under 16GB
 low_gpu_memory_mode = False
@@ -143,6 +144,7 @@ Choosen_Scheduler = scheduler_dict = {
     "DPM++": DPMSolverMultistepScheduler, 
     "PNDM": PNDMScheduler,
     "DDIM": DDIMScheduler,
+    "EulerMotionBrush":EulerDiscreteSchedulerMotionBrush,
 }[sampler_name]
 
 if config.get('enable_multi_text_encoder', False):

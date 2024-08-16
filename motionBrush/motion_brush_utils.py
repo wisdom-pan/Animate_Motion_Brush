@@ -6,6 +6,12 @@ from diffusers.utils.torch_utils import randn_tensor
 from diffusers import StableVideoDiffusionPipeline
 from PIL import Image
 from image_utils import make_gif
+from omegaconf import OmegaConf
+from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
+
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
+from predict_i2v import model_name, weight_dtype, scheduler_dict, low_gpu_memory_mode
+
 
 class EulerDiscreteSchedulerMotionBrush(EulerDiscreteScheduler):
     def __init__(self, *args, mask=None, **kwargs):
@@ -143,13 +149,35 @@ class MotionBrush():
 
     def _init_pipe(self):
         if self.pipe is None:
-            scheduler = EulerDiscreteSchedulerMotionBrush.from_pretrained("stabilityai/stable-video-diffusion-img2vid-xt", subfolder='scheduler')
-            pipe = StableVideoDiffusionPipeline.from_pretrained(
-                "stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16, variant="fp16",
-                scheduler=scheduler
+            # scheduler = EulerDiscreteSchedulerMotionBrush.from_pretrained("stabilityai/stable-video-diffusion-img2vid-xt", subfolder='scheduler')
+            # pipe = StableVideoDiffusionPipeline.from_pretrained(
+            #     "stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16, variant="fp16",
+            #     scheduler=scheduler
+            # )
+            # easyAnimate添加motionBrush控制
+            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                model_name, subfolder="image_encoder"
+            ).to("cuda", weight_dtype)
+            clip_image_processor = CLIPImageProcessor.from_pretrained(
+                model_name, subfolder="image_encoder"
             )
-            pipe.enable_model_cpu_offload()
-            self.pipe = pipe
+            pipeline = EasyAnimateInpaintPipeline(
+                vae=self.vae,
+                text_encoder=self.text_encoder,
+                tokenizer=self.tokenizer,
+                transformer=self.transformer,
+                scheduler=scheduler_dict["EulerMotionBrush"](
+                    **OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs)),
+                clip_image_encoder=clip_image_encoder,
+                clip_image_processor=clip_image_processor,
+            )
+            if low_gpu_memory_mode:
+                pipeline.enable_sequential_cpu_offload()
+            else:
+                pipeline.enable_model_cpu_offload()
+            print("Update diffusion transformer done")
+            # pipe.enable_model_cpu_offload()
+            self.pipe = pipeline
 
     def __call__(self, image, mask):
         if self.pipe is None:
@@ -168,5 +196,5 @@ class MotionBrush():
                 num_inference_steps=25,
             ).frames
         frames_np = [np.array(frame) for frame in frames[0]]
-        make_gif(frames_np, "generated.gif", fps=8, rescale=0.5)
-        return "generated.gif"
+        make_gif(frames_np, "result.gif", fps=8, rescale=0.5)
+        return "result.gif"
